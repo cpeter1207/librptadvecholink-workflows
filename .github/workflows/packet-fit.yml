@@ -71,6 +71,6 @@ jobs:
                 abi) make test quality install-check package-check ;;
                 wire) cargo +1.85.0 test --locked --test wire_packets --test packet_library_fit ;;
                 state) cargo +1.85.0 test --locked --test directory --test qso_state --test account --test directory_control --test directory_transport --test mailbox --test direct_transport --test peer_driver --test routing --test proxy_transport --test proxy_directory --test proxy_session --test talker_coordination --test account_settings --test account_network ;;
-                media) cargo +1.85.0 test --locked --test media --test jitter_playout ;;
+                media) cargo +1.85.0 test --locked --test media --test jitter_playout --test receiver ;;
               esac
             ' sh "$CHECK_TARGET"
