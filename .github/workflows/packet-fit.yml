@@ -6,12 +6,19 @@ on:
       code_ref:
         required: true
         type: string
+      target:
+        type: string
+        default: packet
   workflow_dispatch:
     inputs:
       code_ref:
         description: EchoLink source revision
         required: true
         type: string
+      target:
+        type: choice
+        default: packet
+        options: [packet, abi]
 
 permissions:
   contents: read
@@ -21,12 +28,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           repository: cpeter1207/librptadvecholink
           ref: ${{ inputs.code_ref }}
           persist-credentials: false
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           repository: cpeter1207/rpt_advanced-workflows
           path: .quality-tools
@@ -34,9 +41,11 @@ jobs:
       - name: Verify using current native Debian 13 quality image
         env:
           QUALITY_IMAGE: ghcr.io/cpeter1207/rpt-advanced-quality-debian13:latest
+          CHECK_TARGET: ${{ inputs.target }}
         shell: bash
         run: |
           set -euo pipefail
+          case "$CHECK_TARGET" in packet|abi) ;; *) exit 2 ;; esac
           docker() {
             if [ "$1" = run ]; then
               shift
@@ -54,5 +63,8 @@ jobs:
               export CARGO_TARGET_DIR=/tmp/echolink-packet-target
               cargo +1.85.0 fmt --all -- --check
               cargo +1.85.0 clippy --locked --all-targets -- -D warnings
-              cargo +1.85.0 test --locked --test packet_library_fit
-            '
+              case "$1" in
+                packet) cargo +1.85.0 test --locked --test packet_library_fit ;;
+                abi) make test quality install-check package-check ;;
+              esac
+            ' sh "$CHECK_TARGET"
