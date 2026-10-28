@@ -40,7 +40,7 @@ jobs:
           persist-credentials: false
       - name: Verify using current native Debian 13 quality image
         env:
-          QUALITY_IMAGE: ghcr.io/cpeter1207/rpt-advanced-quality-debian13:latest
+          QUALITY_IMAGE: ghcr.io/cpeter1207/rptadv-codecs-quality-debian13:latest
           CHECK_TARGET: ${{ inputs.target }}
         shell: bash
         run: |
