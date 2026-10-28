@@ -18,7 +18,7 @@ on:
       target:
         type: choice
         default: packet
-        options: [packet, abi, wire, state]
+        options: [packet, abi, wire, state, media]
 
 permissions:
   contents: read
@@ -45,7 +45,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          case "$CHECK_TARGET" in packet|abi|wire|state) ;; *) exit 2 ;; esac
+          case "$CHECK_TARGET" in packet|abi|wire|state|media) ;; *) exit 2 ;; esac
           docker() {
             if [ "$1" = run ]; then
               shift
@@ -61,6 +61,7 @@ jobs:
               test "$VERSION_ID" = 13
               export CARGO_BUILD_JOBS=2
               export CARGO_TARGET_DIR=/tmp/echolink-packet-target
+              export RPTADV_CODEC_DIR=/usr/lib/$(gcc -print-multiarch)
               cargo +1.85.0 fmt --all -- --check
               cargo +1.85.0 clippy --locked --all-targets -- -D warnings
               case "$1" in
@@ -68,5 +69,6 @@ jobs:
                 abi) make test quality install-check package-check ;;
                 wire) cargo +1.85.0 test --locked --test wire_packets --test packet_library_fit ;;
                 state) cargo +1.85.0 test --locked --test directory --test qso_state --test account --test directory_control --test directory_transport --test mailbox --test direct_transport --test peer_driver --test routing --test proxy_transport --test proxy_directory ;;
+                media) cargo +1.85.0 test --locked --test media ;;
               esac
             ' sh "$CHECK_TARGET"
