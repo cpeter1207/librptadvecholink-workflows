@@ -18,7 +18,7 @@ on:
       target:
         type: choice
         default: packet
-        options: [packet, abi, wire]
+        options: [packet, abi, wire, state]
 
 permissions:
   contents: read
@@ -45,7 +45,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          case "$CHECK_TARGET" in packet|abi|wire) ;; *) exit 2 ;; esac
+          case "$CHECK_TARGET" in packet|abi|wire|state) ;; *) exit 2 ;; esac
           docker() {
             if [ "$1" = run ]; then
               shift
@@ -67,5 +67,6 @@ jobs:
                 packet) cargo +1.85.0 test --locked --test packet_library_fit ;;
                 abi) make test quality install-check package-check ;;
                 wire) cargo +1.85.0 test --locked --test wire_packets --test packet_library_fit ;;
+                state) cargo +1.85.0 test --locked --test directory --test qso_state --test account ;;
               esac
             ' sh "$CHECK_TARGET"
