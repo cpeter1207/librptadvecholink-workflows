@@ -67,6 +67,6 @@ jobs:
                 packet) cargo +1.85.0 test --locked --test packet_library_fit ;;
                 abi) make test quality install-check package-check ;;
                 wire) cargo +1.85.0 test --locked --test wire_packets --test packet_library_fit ;;
-                state) cargo +1.85.0 test --locked --test directory --test qso_state --test account ;;
+                state) cargo +1.85.0 test --locked --test directory --test qso_state --test account --test directory_transport ;;
               esac
             ' sh "$CHECK_TARGET"
