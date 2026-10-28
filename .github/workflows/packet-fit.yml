@@ -40,7 +40,7 @@ jobs:
           persist-credentials: false
       - name: Verify using current native Debian 13 quality image
         env:
-          QUALITY_IMAGE: ghcr.io/cpeter1207/rptadv-codecs-quality-debian13:latest
+          QUALITY_IMAGE: ghcr.io/cpeter1207/rptadv-echolink-quality-debian13:latest
           CHECK_TARGET: ${{ inputs.target }}
         shell: bash
         run: |
@@ -69,6 +69,6 @@ jobs:
                 abi) make test quality install-check package-check ;;
                 wire) cargo +1.85.0 test --locked --test wire_packets --test packet_library_fit ;;
                 state) cargo +1.85.0 test --locked --test directory --test qso_state --test account --test directory_control --test directory_transport --test mailbox --test direct_transport --test peer_driver --test routing --test proxy_transport --test proxy_directory ;;
-                media) cargo +1.85.0 test --locked --test media ;;
+                media) cargo +1.85.0 test --locked --test media --test jitter_playout ;;
               esac
             ' sh "$CHECK_TARGET"
