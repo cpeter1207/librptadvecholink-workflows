@@ -54,6 +54,8 @@ jobs:
               command docker "$@"
             fi
           }
+          # Expand the quoted script's variables in the container, not on the host.
+          # shellcheck disable=SC2016
           . .quality-tools/tools/run-in-quality-container.sh \
             "$QUALITY_IMAGE" "$GITHUB_WORKSPACE" sh -ec '
               test "$(dpkg --print-architecture)" = amd64
@@ -68,7 +70,7 @@ jobs:
                 packet) cargo +1.85.0 test --locked --test packet_library_fit ;;
                 abi) make test quality install-check package-check ;;
                 wire) cargo +1.85.0 test --locked --test wire_packets --test packet_library_fit ;;
-                state) cargo +1.85.0 test --locked --test directory --test qso_state --test account --test directory_control --test directory_transport --test mailbox --test direct_transport --test peer_driver --test routing --test proxy_transport --test proxy_directory ;;
+                state) cargo +1.85.0 test --locked --test directory --test qso_state --test account --test directory_control --test directory_transport --test mailbox --test direct_transport --test peer_driver --test routing --test proxy_transport --test proxy_directory --test talker_coordination ;;
                 media) cargo +1.85.0 test --locked --test media --test jitter_playout ;;
               esac
             ' sh "$CHECK_TARGET"
