@@ -1,0 +1,58 @@
+name: EchoLink packet compatibility
+
+on:
+  workflow_call:
+    inputs:
+      code_ref:
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      code_ref:
+        description: EchoLink source revision
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  packet-fit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: cpeter1207/librptadvecholink
+          ref: ${{ inputs.code_ref }}
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: cpeter1207/rpt_advanced-workflows
+          path: .quality-tools
+          persist-credentials: false
+      - name: Verify using current native Debian 13 quality image
+        env:
+          QUALITY_IMAGE: ghcr.io/cpeter1207/rpt-advanced-quality-debian13:latest
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker() {
+            if [ "$1" = run ]; then
+              shift
+              command docker run --cpus=2 --memory=4g --memory-swap=4g --pids-limit=256 "$@"
+            else
+              command docker "$@"
+            fi
+          }
+          . .quality-tools/tools/run-in-quality-container.sh \
+            "$QUALITY_IMAGE" "$GITHUB_WORKSPACE" sh -ec '
+              test "$(dpkg --print-architecture)" = amd64
+              . /etc/os-release
+              test "$VERSION_ID" = 13
+              export CARGO_BUILD_JOBS=2
+              export CARGO_TARGET_DIR=/tmp/echolink-packet-target
+              cargo +1.85.0 fmt --all -- --check
+              cargo +1.85.0 clippy --locked --all-targets -- -D warnings
+              cargo +1.85.0 test --locked --test packet_library_fit
+            '
