@@ -139,5 +139,8 @@ jobs:
               cargo +1.85.0 test --locked -p rpt-advanced-standalone --lib runtime::tests
               cargo +1.85.0 test --locked -p rptadv-asterisk-adapter --lib services::
               cargo +1.85.0 test --locked -p rptadv-asterisk-adapter --lib application::tests
+              cargo +1.85.0 test --locked -p rptadv-asterisk-adapter --lib lifecycle::tests
               cargo +1.85.0 test --locked -p rpt-advanced-core --test link
+              cargo +1.85.0 test --locked -p rpt-advanced-core --test echo_identity
+              cargo +1.85.0 test --locked -p rpt-advanced-core --lib runtime::aggregate::tests::loop_rejection_queues_localized_rf_speech_to_the_local_transmitter
             '
