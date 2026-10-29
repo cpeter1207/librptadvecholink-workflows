@@ -131,9 +131,9 @@ jobs:
               cargo +1.85.0 test --locked -p rptadv-product --lib link::session::tests -- --test-threads=1 --skip egress_admission_above_1024
               cargo +1.85.0 test --locked -p rptadv-product --lib host::tests::echo_ring_policy_survives_prepared_generation
               cargo +1.85.0 test --locked -p rptadv-product --lib lifecycle::tests
-              cargo +1.85.0 test --locked -p rpt-advanced-standalone --lib host_services::tests
+              cargo +1.85.0 test --locked -p rpt-advanced-standalone --lib host_services::
               cargo +1.85.0 test --locked -p rpt-advanced-standalone --lib runtime::tests
-              cargo +1.85.0 test --locked -p rptadv-asterisk-adapter --lib services::tests
+              cargo +1.85.0 test --locked -p rptadv-asterisk-adapter --lib services::
               cargo +1.85.0 test --locked -p rptadv-asterisk-adapter --lib application::tests
               cargo +1.85.0 test --locked -p rpt-advanced-core --test link
             '
