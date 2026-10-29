@@ -126,6 +126,7 @@ jobs:
               cargo +1.85.0 test --locked -p rptadv-product --lib link::ring::tests
               cargo +1.85.0 test --locked -p rptadv-product --lib services::tests
               cargo +1.85.0 test --locked -p rptadv-product --lib configuration::tests
+              cargo +1.85.0 test --locked -p rptadv-product --lib control::tests
               cargo +1.85.0 test --locked -p rptadv-product --lib link::session::tests::echo_source -- --test-threads=1
               # The 2000-peer memory stress is a separate platform/load gate,
               # not part of this bounded four-GiB host regression job.
