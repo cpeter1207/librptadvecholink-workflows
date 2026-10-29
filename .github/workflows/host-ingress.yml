@@ -75,7 +75,9 @@ jobs:
               test "$VERSION_ID" = 13
               export CARGO_BUILD_JOBS=2
               export CARGO_TARGET_DIR=/tmp/echolink-ring-target
-              make -C .test-ring all install CARGO="cargo +1.85.0" \
+              ring_source=$(mktemp -d /tmp/echolink-ring-source.XXXXXX)
+              cp -a .test-ring/. "$ring_source/"
+              make -C "$ring_source" all install CARGO="cargo +1.85.0" \
                 PREFIX="$PWD/.test-sdk" LIBDIR="$PWD/.test-sdk/lib"
               export CARGO_TARGET_DIR=/tmp/echolink-host-target
               export URP_PRODUCT_INCLUDE="$PWD/.test-sdk/include"
