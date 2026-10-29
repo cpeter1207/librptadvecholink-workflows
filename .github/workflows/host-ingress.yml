@@ -54,7 +54,7 @@ jobs:
           persist-credentials: false
       - name: Verify installed candidate DSO in the native quality image
         env:
-          QUALITY_IMAGE: ghcr.io/cpeter1207/rpt-advanced-quality-debian13:latest
+          QUALITY_IMAGE: ghcr.io/cpeter1207/rptadv-echolink-quality-debian13:latest
         shell: bash
         run: |
           set -euo pipefail
