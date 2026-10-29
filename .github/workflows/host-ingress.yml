@@ -2,6 +2,14 @@ name: EchoLink host ingress compatibility
 run-name: EchoLink ingress / ${{ inputs.controller_ref }} / ${{ inputs.ring_ref }}
 
 on:
+  workflow_call:
+    inputs:
+      controller_ref:
+        type: string
+        required: true
+      ring_ref:
+        type: string
+        required: true
   workflow_dispatch:
     inputs:
       controller_ref:
