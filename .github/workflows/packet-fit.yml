@@ -24,7 +24,7 @@ on:
       target:
         type: choice
         default: packet
-        options: [packet, abi, wire, state, media, host]
+        options: [packet, abi, wire, state, media, host, ring]
       controller_ref:
         description: Controller SHA for host ingress validation only
         type: string
@@ -51,7 +51,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          repository: cpeter1207/librptadvecholink
+          repository: ${{ inputs.target == 'ring' && 'cpeter1207/rate_adjusting_pcm_ring' || 'cpeter1207/librptadvecholink' }}
           ref: ${{ inputs.code_ref }}
           persist-credentials: false
       - uses: actions/checkout@v7
@@ -66,7 +66,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          case "$CHECK_TARGET" in packet|abi|wire|state|media) ;; *) exit 2 ;; esac
+          case "$CHECK_TARGET" in packet|abi|wire|state|media|ring) ;; *) exit 2 ;; esac
           docker() {
             if [ "$1" = run ]; then
               shift
@@ -94,5 +94,12 @@ jobs:
                 wire) cargo +1.85.0 test --locked --test wire_packets --test packet_library_fit ;;
                 state) cargo +1.85.0 test --locked --lib --test directory --test qso_state --test account --test directory_control --test directory_transport --test mailbox --test direct_transport --test peer_driver --test routing --test proxy_transport --test proxy_directory --test proxy_session --test talker_coordination --test account_settings --test account_network ;;
                 media) cargo +1.85.0 test --locked --test media --test jitter_playout --test receiver --test prepared_media ;;
+                ring) make coverage ;;
               esac
             ' sh "$CHECK_TARGET"
+      - uses: actions/upload-artifact@v7
+        if: always() && inputs.target == 'ring'
+        with:
+          name: ring-production-coverage
+          path: build/coverage
+          if-no-files-found: error
