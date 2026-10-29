@@ -125,6 +125,8 @@ jobs:
               RUSTDOCFLAGS="-D warnings" cargo +1.85.0 doc --locked -p rptadv-product --no-deps
               cargo +1.85.0 test --locked -p rptadv-product --lib link::ring::tests
               cargo +1.85.0 test --locked -p rptadv-product --lib services::tests
+              cargo +1.85.0 test --locked -p rptadv-product --test echo_text
+              cargo +1.85.0 test --locked -p rptadv-product --lib link::text::tests
               cargo +1.85.0 test --locked -p rptadv-product --lib configuration::tests
               cargo +1.85.0 test --locked -p rptadv-product --lib control::tests
               cargo +1.85.0 test --locked -p rptadv-product --lib link::session::tests::echo_source -- --test-threads=1
