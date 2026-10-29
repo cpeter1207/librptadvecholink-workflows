@@ -111,6 +111,9 @@ jobs:
               export URP_PRODUCT_INCLUDE="$PWD/.test-sdk/include"
               export RUSTFLAGS="${RUSTFLAGS:-} -L native=$PWD/.test-sdk/lib"
               export LD_LIBRARY_PATH="$PWD/.test-sdk/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+              cargo +1.85.0 test --locked -p rptadv-peer-support
+              cargo +1.85.0 clippy --locked -p rptadv-peer-support --all-targets -- -D warnings
+              RUSTDOCFLAGS="-D warnings" cargo +1.85.0 doc --locked -p rptadv-peer-support --no-deps
               # Host loader tests require the complete candidate private set;
               # the dependency image does not supply that runtime installation.
               export RPT_ADVANCED_LIBDIR="$PWD/build"
