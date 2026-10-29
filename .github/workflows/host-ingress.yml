@@ -100,14 +100,11 @@ jobs:
               export URP_PRODUCT_INCLUDE="$PWD/.test-sdk/include"
               export RUSTFLAGS="${RUSTFLAGS:-} -L native=$PWD/.test-sdk/lib"
               export LD_LIBRARY_PATH="$PWD/.test-sdk/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
-              # Loader-backed host tests need the actual coordinated product,
-              # not an alias to the incompatible predecessor SONAME in the image.
-              export RPT_ADVANCED_LIBDIR="$PWD/.test-sdk/private"
-              mkdir -p "$RPT_ADVANCED_LIBDIR"
-              cp -a "/usr/lib/$(gcc -print-multiarch)/rpt_advanced/." "$RPT_ADVANCED_LIBDIR/"
-              cargo +1.85.0 build --locked -p rptadv-product
-              install -m 755 "$CARGO_TARGET_DIR/debug/librptadv_product.so" \
-                "$RPT_ADVANCED_LIBDIR/librptadv_product.so.2"
+              # Host loader tests require the complete candidate private set;
+              # the dependency image does not supply that runtime installation.
+              export RPT_ADVANCED_LIBDIR="$PWD/build"
+              make rust-build CARGO="cargo +1.85.0"
+              export LD_LIBRARY_PATH="$PWD/build:$LD_LIBRARY_PATH"
               readelf -d "$RPT_ADVANCED_LIBDIR/librptadv_product.so.2" | grep "SONAME.*librptadv_product.so.2"
               cargo +1.85.0 fmt --all -- --check
               cargo +1.85.0 clippy --locked -p rptadv-product --all-targets -- -D warnings
