@@ -132,6 +132,7 @@ jobs:
               # not part of this bounded four-GiB host regression job.
               cargo +1.85.0 test --locked -p rptadv-product --lib link::session::tests -- --test-threads=1 --skip egress_admission_above_1024
               cargo +1.85.0 test --locked -p rptadv-product --lib host::tests::echo_ring_policy_survives_prepared_generation
+              cargo +1.85.0 test --locked -p rptadv-product --lib host::tests::echo_alias_routing_precedes_allstar_directory_lookup
               cargo +1.85.0 test --locked -p rptadv-product --lib lifecycle::tests
               cargo +1.85.0 test --locked -p rpt-advanced-standalone --lib host_services::
               cargo +1.85.0 test --locked -p rpt-advanced-standalone --lib runtime::tests
