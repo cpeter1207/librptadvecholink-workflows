@@ -104,5 +104,11 @@ jobs:
               cargo +1.85.0 clippy --locked -p rptadv-product --all-targets -- -D warnings
               RUSTDOCFLAGS="-D warnings" cargo +1.85.0 doc --locked -p rptadv-product --no-deps
               cargo +1.85.0 test --locked -p rptadv-product --lib link::ring::tests
+              cargo +1.85.0 test --locked -p rptadv-product --lib services::tests
+              cargo +1.85.0 test --locked -p rptadv-product --lib lifecycle::tests
+              cargo +1.85.0 test --locked -p rpt-advanced-standalone --lib host_services::tests
+              cargo +1.85.0 test --locked -p rpt-advanced-standalone --lib runtime::tests
+              cargo +1.85.0 test --locked -p rptadv-asterisk-adapter --lib services::tests
+              cargo +1.85.0 test --locked -p rptadv-asterisk-adapter --lib application::tests
               cargo +1.85.0 test --locked -p rpt-advanced-core --test link
             '
