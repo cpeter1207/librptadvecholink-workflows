@@ -52,6 +52,18 @@ jobs:
           repository: cpeter1207/rpt_advanced-workflows
           path: .quality-tools
           persist-credentials: false
+      - uses: actions/checkout@v7
+        with:
+          repository: cpeter1207/librptadviax2
+          ref: 3e77301944fd99e7a8e49ad63f6a488c98064e7f
+          path: .test-iax
+          persist-credentials: false
+      - uses: actions/checkout@v7
+        with:
+          repository: cpeter1207/usbradioplus
+          ref: ca8e9724cdfb9da771c3cad8da8a87cd36d405b8
+          path: .test-usb
+          persist-credentials: false
       - name: Verify installed candidate DSO in the native quality image
         env:
           QUALITY_IMAGE: ghcr.io/cpeter1207/rptadv-echolink-quality-debian13:latest
@@ -74,6 +86,11 @@ jobs:
               . /etc/os-release
               test "$VERSION_ID" = 13
               export CARGO_BUILD_JOBS=2
+              # Product tests compile standalone bindings too. Use its current
+              # source contracts only in this disposable container; runtime
+              # qualification still requires the released dependency gate.
+              install -m 644 .test-iax/include/rptadv_iax2_client.h /usr/include/rptadv_iax2/
+              install -m 644 .test-usb/rust/product/include/usbradioplus_product.h /usr/include/
               export CARGO_TARGET_DIR=/tmp/echolink-ring-target
               ring_source=$(mktemp -d /tmp/echolink-ring-source.XXXXXX)
               cp -a .test-ring/. "$ring_source/"
