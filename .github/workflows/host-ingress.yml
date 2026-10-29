@@ -1,0 +1,81 @@
+name: EchoLink host ingress compatibility
+run-name: EchoLink ingress / ${{ inputs.controller_ref }} / ${{ inputs.ring_ref }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      controller_ref:
+        description: Exact 40-character controller candidate SHA
+        type: string
+        required: true
+      ring_ref:
+        description: Exact 40-character shared ring candidate SHA
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  ingress:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Validate candidate revisions
+        env:
+          CONTROLLER_REF: ${{ inputs.controller_ref }}
+          RING_REF: ${{ inputs.ring_ref }}
+        run: |
+          [[ "$CONTROLLER_REF" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$RING_REF" =~ ^[0-9a-f]{40}$ ]]
+      - uses: actions/checkout@v7
+        with:
+          repository: cpeter1207/rpt_advanced
+          ref: ${{ inputs.controller_ref }}
+          persist-credentials: false
+      - uses: actions/checkout@v7
+        with:
+          repository: cpeter1207/rate_adjusting_pcm_ring
+          ref: ${{ inputs.ring_ref }}
+          path: .test-ring
+          persist-credentials: false
+      - uses: actions/checkout@v7
+        with:
+          repository: cpeter1207/rpt_advanced-workflows
+          path: .quality-tools
+          persist-credentials: false
+      - name: Verify installed candidate DSO in the native quality image
+        env:
+          QUALITY_IMAGE: ghcr.io/cpeter1207/rpt-advanced-quality-debian13:latest
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker() {
+            if [ "$1" = run ]; then
+              shift
+              command docker run --cpus=2 --memory=4g --memory-swap=4g --pids-limit=256 "$@"
+            else
+              command docker "$@"
+            fi
+          }
+          # The quoted script expands workspace paths inside the container.
+          # shellcheck disable=SC2016
+          . .quality-tools/tools/run-in-quality-container.sh \
+            "$QUALITY_IMAGE" "$GITHUB_WORKSPACE" sh -ec '
+              test "$(dpkg --print-architecture)" = amd64
+              . /etc/os-release
+              test "$VERSION_ID" = 13
+              export CARGO_BUILD_JOBS=2
+              export CARGO_TARGET_DIR=/tmp/echolink-ring-target
+              make -C .test-ring all install CARGO="cargo +1.85.0" \
+                PREFIX="$PWD/.test-sdk" LIBDIR="$PWD/.test-sdk/lib"
+              export CARGO_TARGET_DIR=/tmp/echolink-host-target
+              export URP_PRODUCT_INCLUDE="$PWD/.test-sdk/include"
+              export RUSTFLAGS="${RUSTFLAGS:-} -L native=$PWD/.test-sdk/lib"
+              export LD_LIBRARY_PATH="$PWD/.test-sdk/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+              cargo +1.85.0 fmt --all -- --check
+              cargo +1.85.0 clippy --locked -p rptadv-product --all-targets -- -D warnings
+              RUSTDOCFLAGS="-D warnings" cargo +1.85.0 doc --locked -p rptadv-product --no-deps
+              cargo +1.85.0 test --locked -p rptadv-product --lib link::ring::tests
+              cargo +1.85.0 test --locked -p rpt-advanced-core --test link
+            '
