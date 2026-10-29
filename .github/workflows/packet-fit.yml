@@ -24,7 +24,7 @@ on:
       target:
         type: choice
         default: packet
-        options: [packet, abi, wire, state, media, host, ring]
+        options: [packet, abi, wire, state, media, host, ring, ring-mute, ring-state]
       controller_ref:
         description: Controller SHA for host ingress validation only
         type: string
@@ -51,7 +51,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          repository: ${{ inputs.target == 'ring' && 'cpeter1207/rate_adjusting_pcm_ring' || 'cpeter1207/librptadvecholink' }}
+          repository: ${{ startsWith(inputs.target, 'ring') && 'cpeter1207/rate_adjusting_pcm_ring' || 'cpeter1207/librptadvecholink' }}
           ref: ${{ inputs.code_ref }}
           persist-credentials: false
       - uses: actions/checkout@v7
@@ -66,7 +66,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          case "$CHECK_TARGET" in packet|abi|wire|state|media|ring) ;; *) exit 2 ;; esac
+          case "$CHECK_TARGET" in packet|abi|wire|state|media|ring|ring-mute|ring-state) ;; *) exit 2 ;; esac
           docker() {
             if [ "$1" = run ]; then
               shift
@@ -95,10 +95,21 @@ jobs:
                 state) cargo +1.85.0 test --locked --lib --test directory --test qso_state --test account --test directory_control --test directory_transport --test mailbox --test direct_transport --test peer_driver --test routing --test proxy_transport --test proxy_directory --test proxy_session --test talker_coordination --test account_settings --test account_network ;;
                 media) cargo +1.85.0 test --locked --test media --test jitter_playout --test receiver --test prepared_media ;;
                 ring) make coverage ;;
+                ring-mute|ring-state)
+                  ignore_files="/src/(lib|plc|samplerate_adapter|tests)[.]rs$|/tests/"
+                  if [ "$1" = ring-mute ]; then
+                    ignore_files="$ignore_files|/src/ring[.]rs$"
+                  else
+                    ignore_files="$ignore_files|/src/mute[.]rs$"
+                  fi
+                  mkdir -p build/coverage
+                  cargo +nightly-2025-02-20 llvm-cov --locked --all-targets --branch --json \
+                    --ignore-filename-regex "$ignore_files" --output-path build/coverage/coverage.json
+                  ;;
               esac
             ' sh "$CHECK_TARGET"
       - uses: actions/upload-artifact@v7
-        if: always() && inputs.target == 'ring'
+        if: always() && startsWith(inputs.target, 'ring')
         with:
           name: ring-production-coverage
           path: build/coverage
