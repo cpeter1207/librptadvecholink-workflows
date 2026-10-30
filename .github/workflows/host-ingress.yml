@@ -228,26 +228,10 @@ jobs:
                   test_status=0
                   cargo test --locked --release "$@" "$filter" -- --test-threads=1 || test_status=$?
                   mkdir -p build/coverage
-                  cargo llvm-cov report --release --json --verbose \
+                  python3 tests/test_coverage_export.py
+                  python3 tests/export_rust_coverage.py cargo llvm-cov report --release --json \
                     --ignore-filename-regex "$ignore_files|/tests/|/build[.]rs$" \
-                    --output-path build/coverage/rust.json 2>build/coverage/export-command.log
-                  case "$sources" in
-                    *rust/peer-support/src/echolink*)
-                      # Preserve same-run evidence for a suspected LLVM mapping
-                      # error. Do not alter profiles, counters or the checker.
-                      rustc -vV > build/coverage/toolchain.txt
-                      printf "RUSTFLAGS=%s\nCARGO_ENCODED_RUSTFLAGS=%s\nLLVM_PROFILE_FILE=%s\n" \
-                        "${RUSTFLAGS:-}" "${CARGO_ENCODED_RUSTFLAGS:-}" "${LLVM_PROFILE_FILE:-}" \
-                        > build/coverage/instrumentation.txt
-                      find "$CARGO_TARGET_DIR" -name "*.profdata" \
-                        -exec cp -t "$PWD/build/coverage" {} +
-                      find "$CARGO_TARGET_DIR/release" -type f \
-                        \( -perm -u+x -o -name "*.so" \) -print \
-                        > build/coverage/object-paths.txt
-                      tar -czf build/coverage/objects.tar.gz \
-                        -T build/coverage/object-paths.txt
-                      ;;
-                  esac
+                    --output-path build/coverage/rust.json
                   python3 -c "import json,sys; d=json.load(open(sys.argv[1])); assert all(any(f[\"filename\"].endswith(s) for u in d[\"data\"] for f in u[\"files\"]) for s in sys.argv[2].split(\",\"))" build/coverage/rust.json "$sources"
                   python3 tests/test_rust_product_surface.py --coverage build/coverage/rust.json
                   exit "$test_status"
