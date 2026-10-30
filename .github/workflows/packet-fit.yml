@@ -15,6 +15,12 @@ on:
       ring_ref:
         type: string
         default: ''
+      coverage_source:
+        type: string
+        default: ''
+      test_target:
+        type: string
+        default: ''
   workflow_dispatch:
     inputs:
       code_ref:
@@ -33,6 +39,14 @@ on:
         description: Shared ring SHA for host ingress validation only
         type: string
         default: ''
+      coverage_source:
+        description: Optional exact src path for focused coverage
+        type: string
+        default: ''
+      test_target:
+        description: Rust integration target (or lib) for focused coverage
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -42,6 +56,7 @@ jobs:
     if: inputs.target == 'host'
     uses: ./.github/workflows/host-ingress.yml
     with:
+      code_ref: ${{ inputs.code_ref }}
       controller_ref: ${{ inputs.controller_ref }}
       ring_ref: ${{ inputs.ring_ref }}
   packet-fit:
@@ -63,6 +78,8 @@ jobs:
         env:
           QUALITY_IMAGE: ghcr.io/cpeter1207/rptadv-echolink-quality-debian13:latest
           CHECK_TARGET: ${{ inputs.target }}
+          COVERAGE_SOURCE: ${{ inputs.coverage_source }}
+          TEST_TARGET: ${{ inputs.test_target }}
         shell: bash
         run: |
           set -euo pipefail
@@ -94,7 +111,25 @@ jobs:
                 wire) cargo +1.85.0 test --locked --test wire_packets --test packet_library_fit ;;
                 state) cargo +1.85.0 test --locked --lib --test directory --test qso_state --test account --test directory_control --test directory_transport --test mailbox --test direct_transport --test peer_driver --test routing --test proxy_transport --test proxy_directory --test proxy_session --test talker_coordination --test account_settings --test account_network ;;
                 media) cargo +1.85.0 test --locked --test media --test jitter_playout --test receiver --test prepared_media ;;
-                ring|coverage) make coverage ;;
+                ring) make coverage ;;
+                coverage)
+                  if [ -z "$2" ]; then
+                    make coverage
+                  else
+                    case "$2" in src/*.rs) ;; *) exit 2 ;; esac
+                    test -f "$2"
+                    test -n "$3"
+                    # Exclude other production parts and test sources in this
+                    # focused report. The ordinary gate still measures all code.
+                    ignore_files=$(find src -name "*.rs" ! -path "$2" | sed "s|^|/|; s|[.]|[.]|g" | paste -sd "|" -)
+                    if [ "$3" = lib ]; then set -- --lib; else set -- --test "$3"; fi
+                    mkdir -p build/coverage
+                    cargo +nightly-2025-02-20 llvm-cov --locked "$@" --branch --json \
+                      --ignore-filename-regex "$ignore_files|/tests/" \
+                      --output-path build/coverage/rust.json
+                    python3 tests/check_coverage.py build/coverage/rust.json
+                  fi
+                  ;;
                 ring-mute|ring-state)
                   ignore_files="/src/(lib|plc|samplerate_adapter|tests)[.]rs$|/tests/"
                   if [ "$1" = ring-mute ]; then
@@ -107,7 +142,7 @@ jobs:
                     --ignore-filename-regex "$ignore_files" --output-path build/coverage/coverage.json
                   ;;
               esac
-            ' sh "$CHECK_TARGET"
+            ' sh "$CHECK_TARGET" "$COVERAGE_SOURCE" "$TEST_TARGET"
       - uses: actions/upload-artifact@v7
         if: always() && (startsWith(inputs.target, 'ring') || inputs.target == 'coverage')
         with:
