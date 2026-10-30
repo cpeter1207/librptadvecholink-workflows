@@ -46,7 +46,7 @@ on:
         type: string
         default: ''
       coverage_source:
-        description: Optional exact src path for focused coverage
+        description: Optional comma-separated src paths for focused coverage
         type: string
         default: ''
       test_target:
@@ -135,12 +135,20 @@ jobs:
                   if [ -z "$2" ]; then
                     make coverage
                   else
-                    case "$2" in src/*.rs) ;; *) exit 2 ;; esac
-                    test -f "$2"
+                    sources=$2
+                    for source in $(printf "%s" "$sources" | tr "," " "); do
+                      case "$source" in src/*.rs) ;; *) exit 2 ;; esac
+                      test -f "$source"
+                    done
                     test -n "$3"
                     # Exclude other production parts and test sources in this
                     # focused report. The ordinary gate still measures all code.
-                    ignore_files=$(find src -name "*.rs" ! -path "$2" | sed "s|^|/|; s|[.]|[.]|g" | paste -sd "|" -)
+                    ignore_files=$(find src -name "*.rs" | while IFS= read -r candidate; do
+                      case ",$sources," in
+                        *",$candidate,"*) ;;
+                        *) printf "/%s\n" "$candidate" ;;
+                      esac
+                    done | sed "s|[.]|[.]|g" | paste -sd "|" -)
                     targets=$3
                     set --
                     for target in $(printf "%s" "$targets" | tr "," " "); do

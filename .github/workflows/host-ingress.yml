@@ -47,7 +47,7 @@ on:
         type: boolean
         default: false
       coverage_source:
-        description: Exact controller rust source for a focused report
+        description: Comma-separated controller Rust sources for a focused report
         type: string
         default: ''
       package:
@@ -184,12 +184,14 @@ jobs:
                   make rust-coverage CARGO=cargo
                 else
                   # Subsequent closure runs only the selected component tests.
-                  source=$2
+                  sources=$2
                   packages=$3
                   targets=$4
                   filter=$5
-                  case "$source" in rust/*/src/*.rs) ;; *) exit 2 ;; esac
-                  test -f "$source"
+                  for source in $(printf "%s" "$sources" | tr "," " "); do
+                    case "$source" in rust/*/src/*.rs) ;; *) exit 2 ;; esac
+                    test -f "$source"
+                  done
                   case "$filter" in *[!a-zA-Z0-9_:]*) exit 2 ;; esac
                   set --
                   for package in $(printf "%s" "$packages" | tr "," " "); do
@@ -217,14 +219,36 @@ jobs:
                   export LD_LIBRARY_PATH="$PWD/build:$LD_LIBRARY_PATH"
                   selected=$(cargo test --locked --release "$@" "$filter" -- --list)
                   case "$selected" in *": test"*) ;; *) exit 2 ;; esac
-                  ignore_files=$(find rust -name "*.rs" ! -path "$source" | sed "s|^|/|; s|[.]|[.]|g" | paste -sd "|" -)
+                  ignore_files=$(find rust -name "*.rs" | while IFS= read -r candidate; do
+                    case ",$sources," in
+                      *",$candidate,"*) ;;
+                      *) printf "/%s\n" "$candidate" ;;
+                    esac
+                  done | sed "s|[.]|[.]|g" | paste -sd "|" -)
                   test_status=0
                   cargo test --locked --release "$@" "$filter" -- --test-threads=1 || test_status=$?
                   mkdir -p build/coverage
-                  cargo llvm-cov report --release --json \
+                  cargo llvm-cov report --release --json --verbose \
                     --ignore-filename-regex "$ignore_files|/tests/|/build[.]rs$" \
-                    --output-path build/coverage/rust.json
-                  python3 -c "import json,sys; d=json.load(open(sys.argv[1])); assert any(f[\"filename\"].endswith(sys.argv[2]) for u in d[\"data\"] for f in u[\"files\"])" build/coverage/rust.json "$source"
+                    --output-path build/coverage/rust.json 2>build/coverage/export-command.log
+                  case "$sources" in
+                    *rust/peer-support/src/echolink*)
+                      # Preserve same-run evidence for a suspected LLVM mapping
+                      # error. Do not alter profiles, counters or the checker.
+                      rustc -vV > build/coverage/toolchain.txt
+                      printf "RUSTFLAGS=%s\nCARGO_ENCODED_RUSTFLAGS=%s\nLLVM_PROFILE_FILE=%s\n" \
+                        "${RUSTFLAGS:-}" "${CARGO_ENCODED_RUSTFLAGS:-}" "${LLVM_PROFILE_FILE:-}" \
+                        > build/coverage/instrumentation.txt
+                      find "$CARGO_TARGET_DIR" -name "*.profdata" \
+                        -exec cp -t "$PWD/build/coverage" {} +
+                      find "$CARGO_TARGET_DIR/release" -type f \
+                        \( -perm -u+x -o -name "*.so" \) -print \
+                        > build/coverage/object-paths.txt
+                      tar -czf build/coverage/objects.tar.gz \
+                        -T build/coverage/object-paths.txt
+                      ;;
+                  esac
+                  python3 -c "import json,sys; d=json.load(open(sys.argv[1])); assert all(any(f[\"filename\"].endswith(s) for u in d[\"data\"] for f in u[\"files\"]) for s in sys.argv[2].split(\",\"))" build/coverage/rust.json "$sources"
                   python3 tests/test_rust_product_surface.py --coverage build/coverage/rust.json
                   exit "$test_status"
                 fi
@@ -275,5 +299,5 @@ jobs:
         if: always() && inputs.coverage
         with:
           name: controller-production-coverage
-          path: build/coverage/rust.json
+          path: build/coverage/
           if-no-files-found: error
