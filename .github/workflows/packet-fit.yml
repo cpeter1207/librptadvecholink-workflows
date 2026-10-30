@@ -21,6 +21,12 @@ on:
       test_target:
         type: string
         default: ''
+      package:
+        type: string
+        default: ''
+      test_filter:
+        type: string
+        default: ''
   workflow_dispatch:
     inputs:
       code_ref:
@@ -47,6 +53,14 @@ on:
         description: Comma-separated Rust test targets (lib or integration names) for focused coverage
         type: string
         default: ''
+      package:
+        description: Optional comma-separated controller packages for focused host coverage
+        type: string
+        default: ''
+      test_filter:
+        description: Optional controller Rust test name or module path
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -60,6 +74,10 @@ jobs:
       controller_ref: ${{ inputs.controller_ref }}
       ring_ref: ${{ inputs.ring_ref }}
       coverage: ${{ inputs.target == 'host-coverage' }}
+      coverage_source: ${{ inputs.coverage_source }}
+      package: ${{ inputs.package }}
+      test_target: ${{ inputs.test_target }}
+      test_filter: ${{ inputs.test_filter }}
   packet-fit:
     if: inputs.target != 'host' && inputs.target != 'host-coverage'
     runs-on: ubuntu-latest

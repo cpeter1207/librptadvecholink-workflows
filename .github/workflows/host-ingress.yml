@@ -16,6 +16,18 @@ on:
       coverage:
         type: boolean
         default: false
+      coverage_source:
+        type: string
+        default: ''
+      package:
+        type: string
+        default: ''
+      test_target:
+        type: string
+        default: ''
+      test_filter:
+        type: string
+        default: ''
   workflow_dispatch:
     inputs:
       code_ref:
@@ -34,6 +46,22 @@ on:
         description: Generate the first controller production coverage report
         type: boolean
         default: false
+      coverage_source:
+        description: Exact controller rust source for a focused report
+        type: string
+        default: ''
+      package:
+        description: Comma-separated controller packages; empty keeps the full report
+        type: string
+        default: ''
+      test_target:
+        description: Optional comma-separated lib/integration test targets
+        type: string
+        default: ''
+      test_filter:
+        description: Optional Rust test name or module path
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -96,6 +124,10 @@ jobs:
         env:
           QUALITY_IMAGE: ghcr.io/cpeter1207/rptadv-echolink-quality-debian13:latest
           HOST_COVERAGE: ${{ inputs.coverage }}
+          COVERAGE_SOURCE: ${{ inputs.coverage_source }}
+          HOST_PACKAGE: ${{ inputs.package }}
+          TEST_TARGET: ${{ inputs.test_target }}
+          TEST_FILTER: ${{ inputs.test_filter }}
         shell: bash
         run: |
           set -euo pipefail
@@ -143,18 +175,64 @@ jobs:
               export URP_PRODUCT_INCLUDE="$PWD/.test-sdk/include"
               export RUSTFLAGS="${RUSTFLAGS:-} -L native=$PWD/.test-sdk/lib"
               export LD_LIBRARY_PATH="$PWD/.test-sdk/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
-              cargo +1.85.0 test --locked -p rptadv-peer-support
-              cargo +1.85.0 clippy --locked -p rptadv-peer-support --all-targets -- -D warnings
-              RUSTDOCFLAGS="-D warnings" cargo +1.85.0 doc --locked -p rptadv-peer-support --no-deps
               # Host loader tests require the complete candidate private set;
               # the dependency image does not supply that runtime installation.
               export RPT_ADVANCED_LIBDIR="$PWD/build"
               if [ "$1" = true ]; then
-                # Reuse the production coverage recipe with the matched private
-                # provider set. This is a diagnostic report, not a PR gate.
-                make rust-coverage CARGO=cargo
+                if [ -z "$3" ]; then
+                  # The first report uses the unchanged production recipe.
+                  make rust-coverage CARGO=cargo
+                else
+                  # Subsequent closure runs only the selected component tests.
+                  source=$2
+                  packages=$3
+                  targets=$4
+                  filter=$5
+                  case "$source" in rust/*/src/*.rs) ;; *) exit 2 ;; esac
+                  test -f "$source"
+                  case "$filter" in *[!a-zA-Z0-9_:]*) exit 2 ;; esac
+                  set --
+                  for package in $(printf "%s" "$packages" | tr "," " "); do
+                    case "$package" in
+                      rptadv-peer-support|rpt-advanced-core|rptadv-product|rpt-advanced-standalone|rptadv-asterisk-adapter|rptadv-jitter-client|rptadv-file-adapter|rptadv-speech-adapter) ;;
+                      *) exit 2 ;;
+                    esac
+                    set -- "$@" -p "$package"
+                  done
+                  test "$#" -gt 0
+                  for target in $(printf "%s" "$targets" | tr "," " "); do
+                    case "$target" in
+                      lib) set -- "$@" --lib ;;
+                      *[!a-zA-Z0-9_-]*) exit 2 ;;
+                      *) set -- "$@" --test "$target" ;;
+                    esac
+                  done
+                  export RUSTUP_TOOLCHAIN=nightly-2025-02-20
+                  export CARGO_TARGET_DIR=/tmp/echolink-host-target/focused-coverage
+                  export CARGO_LLVM_COV_TARGET_DIR="$CARGO_TARGET_DIR"
+                  eval "$(cargo llvm-cov show-env --branch --export-prefix)"
+                  cargo llvm-cov clean --workspace
+                  make rust-build CARGO=cargo
+                  export LIBRARY_PATH="$CARGO_TARGET_DIR/release${LIBRARY_PATH:+:$LIBRARY_PATH}"
+                  export LD_LIBRARY_PATH="$PWD/build:$LD_LIBRARY_PATH"
+                  selected=$(cargo test --locked --release "$@" "$filter" -- --list)
+                  case "$selected" in *": test"*) ;; *) exit 2 ;; esac
+                  ignore_files=$(find rust -name "*.rs" ! -path "$source" | sed "s|^|/|; s|[.]|[.]|g" | paste -sd "|" -)
+                  test_status=0
+                  cargo test --locked --release "$@" "$filter" -- --test-threads=1 || test_status=$?
+                  mkdir -p build/coverage
+                  cargo llvm-cov report --release --json \
+                    --ignore-filename-regex "$ignore_files|/tests/|/build[.]rs$" \
+                    --output-path build/coverage/rust.json
+                  python3 -c "import json,sys; d=json.load(open(sys.argv[1])); assert any(f[\"filename\"].endswith(sys.argv[2]) for u in d[\"data\"] for f in u[\"files\"])" build/coverage/rust.json "$source"
+                  python3 tests/test_rust_product_surface.py --coverage build/coverage/rust.json
+                  exit "$test_status"
+                fi
                 exit 0
               fi
+              cargo +1.85.0 test --locked -p rptadv-peer-support
+              cargo +1.85.0 clippy --locked -p rptadv-peer-support --all-targets -- -D warnings
+              RUSTDOCFLAGS="-D warnings" cargo +1.85.0 doc --locked -p rptadv-peer-support --no-deps
               make rust-build CARGO="cargo +1.85.0"
               export LD_LIBRARY_PATH="$PWD/build:$LD_LIBRARY_PATH"
               readelf -d "$RPT_ADVANCED_LIBDIR/librptadv_product.so.2" | grep "SONAME.*librptadv_product.so.2"
@@ -192,7 +270,7 @@ jobs:
               fixture_modules=$(mktemp -d /tmp/echolink-host-modules.XXXXXX)
               install -m 0755 build/app_rpt_advanced.so build/chan_rpt_fixture.so "$fixture_modules/"
               RPT_TEST_MODULE_DIR="$fixture_modules" python3 tests/test_rust_asterisk_lifecycle.py
-            ' sh "$HOST_COVERAGE"
+            ' sh "$HOST_COVERAGE" "$COVERAGE_SOURCE" "$HOST_PACKAGE" "$TEST_TARGET" "$TEST_FILTER"
       - uses: actions/upload-artifact@v7
         if: always() && inputs.coverage
         with:
