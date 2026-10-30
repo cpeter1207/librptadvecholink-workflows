@@ -24,7 +24,7 @@ on:
       target:
         type: choice
         default: packet
-        options: [packet, abi, wire, state, media, host, ring, ring-mute, ring-state]
+        options: [packet, abi, wire, state, media, host, coverage, ring, ring-mute, ring-state]
       controller_ref:
         description: Controller SHA for host ingress validation only
         type: string
@@ -66,7 +66,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          case "$CHECK_TARGET" in packet|abi|wire|state|media|ring|ring-mute|ring-state) ;; *) exit 2 ;; esac
+          case "$CHECK_TARGET" in packet|abi|wire|state|media|coverage|ring|ring-mute|ring-state) ;; *) exit 2 ;; esac
           docker() {
             if [ "$1" = run ]; then
               shift
@@ -94,7 +94,7 @@ jobs:
                 wire) cargo +1.85.0 test --locked --test wire_packets --test packet_library_fit ;;
                 state) cargo +1.85.0 test --locked --lib --test directory --test qso_state --test account --test directory_control --test directory_transport --test mailbox --test direct_transport --test peer_driver --test routing --test proxy_transport --test proxy_directory --test proxy_session --test talker_coordination --test account_settings --test account_network ;;
                 media) cargo +1.85.0 test --locked --test media --test jitter_playout --test receiver --test prepared_media ;;
-                ring) make coverage ;;
+                ring|coverage) make coverage ;;
                 ring-mute|ring-state)
                   ignore_files="/src/(lib|plc|samplerate_adapter|tests)[.]rs$|/tests/"
                   if [ "$1" = ring-mute ]; then
@@ -109,8 +109,8 @@ jobs:
               esac
             ' sh "$CHECK_TARGET"
       - uses: actions/upload-artifact@v7
-        if: always() && startsWith(inputs.target, 'ring')
+        if: always() && (startsWith(inputs.target, 'ring') || inputs.target == 'coverage')
         with:
-          name: ring-production-coverage
+          name: ${{ inputs.target == 'coverage' && 'echolink-production-coverage' || 'ring-production-coverage' }}
           path: build/coverage
           if-no-files-found: error
