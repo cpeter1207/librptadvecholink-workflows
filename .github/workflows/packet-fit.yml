@@ -30,7 +30,7 @@ on:
       target:
         type: choice
         default: packet
-        options: [packet, abi, wire, state, media, host, coverage, ring, ring-mute, ring-state]
+        options: [packet, abi, wire, state, media, host, host-coverage, coverage, ring, ring-mute, ring-state]
       controller_ref:
         description: Controller SHA for host ingress validation only
         type: string
@@ -53,14 +53,15 @@ permissions:
 
 jobs:
   host-ingress:
-    if: inputs.target == 'host'
+    if: inputs.target == 'host' || inputs.target == 'host-coverage'
     uses: ./.github/workflows/host-ingress.yml
     with:
       code_ref: ${{ inputs.code_ref }}
       controller_ref: ${{ inputs.controller_ref }}
       ring_ref: ${{ inputs.ring_ref }}
+      coverage: ${{ inputs.target == 'host-coverage' }}
   packet-fit:
-    if: inputs.target != 'host'
+    if: inputs.target != 'host' && inputs.target != 'host-coverage'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:

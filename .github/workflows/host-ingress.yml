@@ -13,6 +13,9 @@ on:
       ring_ref:
         type: string
         required: true
+      coverage:
+        type: boolean
+        default: false
   workflow_dispatch:
     inputs:
       code_ref:
@@ -27,6 +30,10 @@ on:
         description: Exact 40-character shared ring candidate SHA
         type: string
         required: true
+      coverage:
+        description: Generate the first controller production coverage report
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -34,7 +41,7 @@ permissions:
 jobs:
   ingress:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: ${{ inputs.coverage && 60 || 25 }}
     steps:
       - name: Validate candidate revisions
         env:
@@ -88,13 +95,16 @@ jobs:
       - name: Verify installed candidate DSO in the native quality image
         env:
           QUALITY_IMAGE: ghcr.io/cpeter1207/rptadv-echolink-quality-debian13:latest
+          HOST_COVERAGE: ${{ inputs.coverage }}
         shell: bash
         run: |
           set -euo pipefail
+          host_memory=4g
+          if [ "$HOST_COVERAGE" = true ]; then host_memory=8g; fi
           docker() {
             if [ "$1" = run ]; then
               shift
-              command docker run --cpus=2 --memory=4g --memory-swap=4g --pids-limit=256 "$@"
+              command docker run --cpus=2 --memory="$host_memory" --memory-swap="$host_memory" --pids-limit=256 "$@"
             else
               command docker "$@"
             fi
@@ -139,6 +149,12 @@ jobs:
               # Host loader tests require the complete candidate private set;
               # the dependency image does not supply that runtime installation.
               export RPT_ADVANCED_LIBDIR="$PWD/build"
+              if [ "$1" = true ]; then
+                # Reuse the production coverage recipe with the matched private
+                # provider set. This is a diagnostic report, not a PR gate.
+                make rust-coverage CARGO=cargo
+                exit 0
+              fi
               make rust-build CARGO="cargo +1.85.0"
               export LD_LIBRARY_PATH="$PWD/build:$LD_LIBRARY_PATH"
               readelf -d "$RPT_ADVANCED_LIBDIR/librptadv_product.so.2" | grep "SONAME.*librptadv_product.so.2"
@@ -176,4 +192,10 @@ jobs:
               fixture_modules=$(mktemp -d /tmp/echolink-host-modules.XXXXXX)
               install -m 0755 build/app_rpt_advanced.so build/chan_rpt_fixture.so "$fixture_modules/"
               RPT_TEST_MODULE_DIR="$fixture_modules" python3 tests/test_rust_asterisk_lifecycle.py
-            '
+            ' sh "$HOST_COVERAGE"
+      - uses: actions/upload-artifact@v7
+        if: always() && inputs.coverage
+        with:
+          name: controller-production-coverage
+          path: build/coverage/rust.json
+          if-no-files-found: error
