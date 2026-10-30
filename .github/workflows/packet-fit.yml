@@ -44,7 +44,7 @@ on:
         type: string
         default: ''
       test_target:
-        description: Rust integration target (or lib) for focused coverage
+        description: Comma-separated Rust integration targets (or lib) for focused coverage
         type: string
         default: ''
 
@@ -122,7 +122,17 @@ jobs:
                     # Exclude other production parts and test sources in this
                     # focused report. The ordinary gate still measures all code.
                     ignore_files=$(find src -name "*.rs" ! -path "$2" | sed "s|^|/|; s|[.]|[.]|g" | paste -sd "|" -)
-                    if [ "$3" = lib ]; then set -- --lib; else set -- --test "$3"; fi
+                    if [ "$3" = lib ]; then
+                      set -- --lib
+                    else
+                      targets=$3
+                      set --
+                      for target in $(printf "%s" "$targets" | tr "," " "); do
+                        case "$target" in *[!a-zA-Z0-9_-]*|"") exit 2 ;; esac
+                        set -- "$@" --test "$target"
+                      done
+                      test "$#" -gt 0
+                    fi
                     mkdir -p build/coverage
                     cargo +nightly-2025-02-20 llvm-cov --locked "$@" --branch --json \
                       --ignore-filename-regex "$ignore_files|/tests/" \
