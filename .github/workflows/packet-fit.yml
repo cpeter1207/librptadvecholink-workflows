@@ -6,37 +6,103 @@ on:
       code_ref:
         required: true
         type: string
+      target:
+        type: string
+        default: packet
+      controller_ref:
+        type: string
+        default: ''
+      ring_ref:
+        type: string
+        default: ''
+      coverage_source:
+        type: string
+        default: ''
+      test_target:
+        type: string
+        default: ''
+      package:
+        type: string
+        default: ''
+      test_filter:
+        type: string
+        default: ''
   workflow_dispatch:
     inputs:
       code_ref:
         description: EchoLink source revision
         required: true
         type: string
+      target:
+        type: choice
+        default: packet
+        options: [packet, abi, wire, state, media, host, host-coverage, coverage, ring, ring-mute, ring-state]
+      controller_ref:
+        description: Controller SHA for host ingress validation only
+        type: string
+        default: ''
+      ring_ref:
+        description: Shared ring SHA for host ingress validation only
+        type: string
+        default: ''
+      coverage_source:
+        description: Optional comma-separated src paths for focused coverage
+        type: string
+        default: ''
+      test_target:
+        description: Comma-separated Rust test targets (lib or integration names) for focused coverage
+        type: string
+        default: ''
+      package:
+        description: Optional comma-separated controller packages for focused host coverage
+        type: string
+        default: ''
+      test_filter:
+        description: Optional controller Rust test name or module path
+        type: string
+        default: ''
 
 permissions:
   contents: read
 
 jobs:
+  host-ingress:
+    if: inputs.target == 'host' || inputs.target == 'host-coverage'
+    uses: ./.github/workflows/host-ingress.yml
+    with:
+      code_ref: ${{ inputs.code_ref }}
+      controller_ref: ${{ inputs.controller_ref }}
+      ring_ref: ${{ inputs.ring_ref }}
+      coverage: ${{ inputs.target == 'host-coverage' }}
+      coverage_source: ${{ inputs.coverage_source }}
+      package: ${{ inputs.package }}
+      test_target: ${{ inputs.test_target }}
+      test_filter: ${{ inputs.test_filter }}
   packet-fit:
+    if: inputs.target != 'host' && inputs.target != 'host-coverage'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
-          repository: cpeter1207/librptadvecholink
+          repository: ${{ startsWith(inputs.target, 'ring') && 'cpeter1207/rate_adjusting_pcm_ring' || 'cpeter1207/librptadvecholink' }}
           ref: ${{ inputs.code_ref }}
           persist-credentials: false
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           repository: cpeter1207/rpt_advanced-workflows
           path: .quality-tools
           persist-credentials: false
       - name: Verify using current native Debian 13 quality image
         env:
-          QUALITY_IMAGE: ghcr.io/cpeter1207/rpt-advanced-quality-debian13:latest
+          QUALITY_IMAGE: ghcr.io/cpeter1207/rptadv-echolink-quality-debian13:latest
+          CHECK_TARGET: ${{ inputs.target }}
+          COVERAGE_SOURCE: ${{ inputs.coverage_source }}
+          TEST_TARGET: ${{ inputs.test_target }}
         shell: bash
         run: |
           set -euo pipefail
+          case "$CHECK_TARGET" in packet|abi|wire|state|media|coverage|ring|ring-mute|ring-state) ;; *) exit 2 ;; esac
           docker() {
             if [ "$1" = run ]; then
               shift
@@ -45,6 +111,8 @@ jobs:
               command docker "$@"
             fi
           }
+          # Expand the quoted script's variables in the container, not on the host.
+          # shellcheck disable=SC2016
           . .quality-tools/tools/run-in-quality-container.sh \
             "$QUALITY_IMAGE" "$GITHUB_WORKSPACE" sh -ec '
               test "$(dpkg --print-architecture)" = amd64
@@ -52,7 +120,68 @@ jobs:
               test "$VERSION_ID" = 13
               export CARGO_BUILD_JOBS=2
               export CARGO_TARGET_DIR=/tmp/echolink-packet-target
+              RPTADV_CODEC_DIR=/usr/lib/$(gcc -print-multiarch)
+              export RPTADV_CODEC_DIR
               cargo +1.85.0 fmt --all -- --check
               cargo +1.85.0 clippy --locked --all-targets -- -D warnings
-              cargo +1.85.0 test --locked --test packet_library_fit
-            '
+              case "$1" in
+                packet) cargo +1.85.0 test --locked --test packet_library_fit ;;
+                abi) make test quality install-check package-check ;;
+                wire) cargo +1.85.0 test --locked --test wire_packets --test packet_library_fit ;;
+                state) cargo +1.85.0 test --locked --lib --test directory --test qso_state --test account --test directory_control --test directory_transport --test mailbox --test direct_transport --test peer_driver --test routing --test proxy_transport --test proxy_directory --test proxy_session --test talker_coordination --test account_settings --test account_network ;;
+                media) cargo +1.85.0 test --locked --test media --test jitter_playout --test receiver --test prepared_media ;;
+                ring) make coverage ;;
+                coverage)
+                  if [ -z "$2" ]; then
+                    make coverage
+                  else
+                    sources=$2
+                    for source in $(printf "%s" "$sources" | tr "," " "); do
+                      case "$source" in src/*.rs) ;; *) exit 2 ;; esac
+                      test -f "$source"
+                    done
+                    test -n "$3"
+                    # Exclude other production parts and test sources in this
+                    # focused report. The ordinary gate still measures all code.
+                    ignore_files=$(find src -name "*.rs" | while IFS= read -r candidate; do
+                      case ",$sources," in
+                        *",$candidate,"*) ;;
+                        *) printf "/%s\n" "$candidate" ;;
+                      esac
+                    done | sed "s|[.]|[.]|g" | paste -sd "|" -)
+                    targets=$3
+                    set --
+                    for target in $(printf "%s" "$targets" | tr "," " "); do
+                      case "$target" in
+                        lib) set -- "$@" --lib ;;
+                        *[!a-zA-Z0-9_-]*|"") exit 2 ;;
+                        *) set -- "$@" --test "$target" ;;
+                      esac
+                    done
+                    test "$#" -gt 0
+                    mkdir -p build/coverage
+                    cargo +nightly-2025-02-20 llvm-cov --locked "$@" --branch --json \
+                      --ignore-filename-regex "$ignore_files|/tests/" \
+                      --output-path build/coverage/rust.json
+                    python3 tests/check_coverage.py build/coverage/rust.json
+                  fi
+                  ;;
+                ring-mute|ring-state)
+                  ignore_files="/src/(lib|plc|samplerate_adapter|tests)[.]rs$|/tests/"
+                  if [ "$1" = ring-mute ]; then
+                    ignore_files="$ignore_files|/src/ring[.]rs$"
+                  else
+                    ignore_files="$ignore_files|/src/mute[.]rs$"
+                  fi
+                  mkdir -p build/coverage
+                  cargo +nightly-2025-02-20 llvm-cov --locked --all-targets --branch --json \
+                    --ignore-filename-regex "$ignore_files" --output-path build/coverage/coverage.json
+                  ;;
+              esac
+            ' sh "$CHECK_TARGET" "$COVERAGE_SOURCE" "$TEST_TARGET"
+      - uses: actions/upload-artifact@v7
+        if: always() && (startsWith(inputs.target, 'ring') || inputs.target == 'coverage')
+        with:
+          name: ${{ inputs.target == 'coverage' && 'echolink-production-coverage' || 'ring-production-coverage' }}
+          path: build/coverage
+          if-no-files-found: error
